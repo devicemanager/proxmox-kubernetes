@@ -1,0 +1,44 @@
+# terraform/terraform.tfvars.example
+# Copy to terraform.tfvars and adjust values
+
+# Proxmox connection
+proxmox_host     = "192.168.20.40"
+proxmox_node     = "pve-5"
+
+# Authentication - Choose ONE method:
+# Method 1: Username/Password
+proxmox_user     = "root@pam"
+proxmox_password = "your-proxmox-password"
+
+# Method 2: API Token (comment out user/pass above)
+# proxmox_api_token = "root@pam!terraform=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Template and console access
+template_id      = 9000
+console_password = "changeme"
+
+# Network configuration
+vm_network = {
+  subnet      = "192.168.20"
+  gateway     = "192.168.20.1"
+  dns_servers = "192.168.20.1,1.1.1.1"
+}
+
+# VM specifications
+master_vm = {
+  vmid      = 100
+  name      = "k8s-master"
+  cores     = 2
+  memory    = 4096
+  disk_size = "32G"
+  ip_suffix = 51
+}
+
+worker_vm = {
+  vmid      = 101
+  name      = "k8s-worker01"
+  cores     = 2
+  memory    = 4096
+  disk_size = "32G"
+  ip_suffix = 52
+
