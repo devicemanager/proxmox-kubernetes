@@ -76,6 +76,20 @@ if [ "$confirm" != "yes" ]; then
     exit 0
 fi
 
+    if [ -f .env ]; then
+        echo "Loading .env for local secrets..."
+        set -a
+        # shellcheck disable=SC1091
+        source .env
+        set +a
+    fi
+
+    if [ -n "${PROXMOX_API_TOKEN:-}" ]; then
+        export TF_VAR_proxmox_api_token="$PROXMOX_API_TOKEN"
+    fi
+    if [ -n "${CONSOLE_PASSWORD:-}" ]; then
+        export TF_VAR_console_password="$CONSOLE_PASSWORD"
+    fi
 # Deploy
 echo "Step 4: Deploying VMs..."
 terraform apply -auto-approve

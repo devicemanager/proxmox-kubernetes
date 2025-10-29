@@ -3,6 +3,7 @@
 .env.local
 terraform.tfvars
 terraform/terraform.tfvars
+ansible/playbooks/ansible_fetched/
 
 # Terraform
 *.tfstate
