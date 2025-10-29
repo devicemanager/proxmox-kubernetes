@@ -1,0 +1,134 @@
+---
+# tasks for node.containerd role
+- name: Ensure apt cache is up to date
+  apt:
+    update_cache: yes
+  become: true
+
+- name: Install containerd package(s)
+  apt:
+    name: "{{ containerd_packages }}"
+    state: present
+  become: true
+
+- name: Ensure modules-load file for containerd exists
+  copy:
+    dest: /etc/modules-load.d/containerd.conf
+    content: |
+      overlay
+      br_netfilter
+    owner: root
+    group: root
+    mode: '0644'
+  become: true
+
+- name: Load overlay module
+  become: true
+  ansible.builtin.command: modprobe overlay
+  changed_when: false
+
+- name: Load br_netfilter module
+  become: true
+  ansible.builtin.command: modprobe br_netfilter
+  changed_when: false
+
+- name: Ensure sysctl parameters for Kubernetes are set
+  sysctl:
+    name: '{{ item.key }}'
+    value: '{{ item.value }}'
+    state: present
+    reload: yes
+  loop:
+    - { key: 'net.bridge.bridge-nf-call-iptables', value: '1' }
+    - { key: 'net.bridge.bridge-nf-call-ip6tables', value: '1' }
+    - { key: 'net.ipv4.ip_forward', value: '1' }
+  become: true
+
+- name: Ensure /etc/containerd exists
+  file:
+    path: /etc/containerd
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  become: true
+
+- name: Generate default containerd config
+  become: true
+  command: containerd config default
+  register: containerd_default_cfg
+  changed_when: false
+
+- name: Write containerd config to file if changed
+  become: true
+  copy:
+    dest: "{{ containerd_config_path }}"
+    content: "{{ containerd_default_cfg.stdout }}"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart containerd
+
+- name: Ensure SystemdCgroup is true in containerd config
+  become: true
+  replace:
+    path: "{{ containerd_config_path }}"
+    regexp: 'SystemdCgroup\s*=\s*false'
+    replace: 'SystemdCgroup = true'
+  notify: Restart containerd
+
+- name: Ensure systemd drop-in directory exists
+  file:
+    path: /etc/systemd/system/containerd.service.d
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  become: true
+
+- name: Create systemd drop-in to load required modules before containerd
+  copy:
+    dest: "{{ containerd_systemd_dropin }}"
+    content: |
+      [Service]
+      ExecStartPre=/sbin/modprobe overlay
+      ExecStartPre=/sbin/modprobe br_netfilter
+    owner: root
+    group: root
+    mode: '0644'
+    force: yes
+  become: true
+  notify: Restart containerd
+
+- name: Reload systemd daemon
+  become: true
+  command: systemctl daemon-reload
+  changed_when: false
+
+- name: Ensure containerd service is enabled and started
+  become: true
+  systemd:
+    name: containerd
+    state: started
+    enabled: yes
+
+- name: Verify containerd is active
+  become: true
+  command: systemctl is-active containerd
+  register: containerd_active
+  failed_when: containerd_active.stdout.strip() != 'active'
+  changed_when: false
+
+- name: Verify overlay module is loaded
+  become: true
+  shell: lsmod | grep -w overlay
+  register: overlay_mod
+  failed_when: overlay_mod.rc != 0
+  changed_when: false
+
+- name: Verify br_netfilter module is loaded
+  become: true
+  shell: lsmod | grep -w br_netfilter
+  register: br_mod
+  failed_when: br_mod.rc != 0
+  changed_when: false

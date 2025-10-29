@@ -1,0 +1,7 @@
+---
+- name: Configure locales on Kubernetes nodes
+  hosts: k8s_nodes
+  become: true
+  gather_facts: true
+  roles:
+    - node.locales

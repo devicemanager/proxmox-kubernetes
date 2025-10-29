@@ -67,7 +67,7 @@ variable "master_vm" {
     name        = string
     cores       = number
     memory      = number
-    disk_size   = string
+    disk_size   = number
     ip_suffix   = number
   })
   default = {
@@ -75,7 +75,7 @@ variable "master_vm" {
     name        = "k8s-master"
     cores       = 2
     memory      = 4096
-    disk_size   = "32G"
+    disk_size   = 32
     ip_suffix   = 51
   }
 }
@@ -87,7 +87,7 @@ variable "worker_vm" {
     name        = string
     cores       = number
     memory      = number
-    disk_size   = string
+    disk_size   = number
     ip_suffix   = number
   })
   default = {
@@ -95,7 +95,7 @@ variable "worker_vm" {
     name        = "k8s-worker01"
     cores       = 2
     memory      = 4096
-    disk_size   = "32G"
+    disk_size   = 32
     ip_suffix   = 52
   }
 }

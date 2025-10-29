@@ -1,0 +1,7 @@
+---
+# defaults for node.containerd
+containerd_packages:
+  - containerd
+
+containerd_config_path: /etc/containerd/config.toml
+containerd_systemd_dropin: /etc/systemd/system/containerd.service.d/override.conf

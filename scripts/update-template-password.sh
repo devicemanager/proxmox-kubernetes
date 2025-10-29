@@ -4,6 +4,11 @@
 TEMPLATE_ID="9000"
 ROOT_PASSWORD='$y$j9T$eHbdTPK0hVFCjdHhTew7S.$nf/NOyA8YPNXsMFWbJEyfLOyHlqqhjjPkrCYW7qGZJ4'
 
+# Source secrets from .env
+if [ -f .env ]; then
+    source .env
+fi
+
 echo "Updating template ${TEMPLATE_ID} with root password..."
 
 ssh root@192.168.20.40 << EOF

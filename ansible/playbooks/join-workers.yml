@@ -1,0 +1,54 @@
+---
+# Playbook: join-workers.yml
+# 1) Run on the control-plane to generate a kubeadm join command (fresh token).
+# 2) Fetch the command to the control host and run it on worker nodes (idempotent).
+
+- name: Generate kubeadm join command on master
+  hosts: k8s-master
+  become: true
+  tasks:
+    - name: Create join script with fresh token
+      ansible.builtin.shell: |
+        set -e
+        kubeadm token create --print-join-command --ttl 24h > /tmp/kube_join_cmd.sh
+        chmod 0700 /tmp/kube_join_cmd.sh
+      register: join_create
+
+    - name: Fetch join script to control host
+      ansible.builtin.fetch:
+        src: /tmp/kube_join_cmd.sh
+        dest: ansible_fetched/kube_join_cmd.sh
+        flat: yes
+
+- name: Run join script on worker nodes
+  hosts: k8s_nodes
+  become: true
+  tasks:
+    - name: Skip master
+      ansible.builtin.debug:
+        msg: "Skipping master"
+      when: inventory_hostname == 'k8s-master'
+
+    - name: Check if node already has kubelet config
+      ansible.builtin.stat:
+        path: /etc/kubernetes/kubelet.conf
+      register: kubelet_conf
+
+    - name: Copy join script to node
+      ansible.builtin.copy:
+        src: ansible_fetched/kube_join_cmd.sh
+        dest: /tmp/kube_join_cmd.sh
+        mode: '0700'
+      when: not kubelet_conf.stat.exists
+
+    - name: Run kubeadm join on node (idempotent)
+      ansible.builtin.command: /bin/sh /tmp/kube_join_cmd.sh
+      register: join_result
+      changed_when: "join_result.rc == 0"
+      when: not kubelet_conf.stat.exists
+
+    - name: Remove join script from node
+      ansible.builtin.file:
+        path: /tmp/kube_join_cmd.sh
+        state: absent
+      when: not kubelet_conf.stat.exists
