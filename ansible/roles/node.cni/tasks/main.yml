@@ -1,0 +1,101 @@
+---
+# Deploy Calico CNI
+- name: Verify CNI plugin presence on node
+  ansible.builtin.stat:
+    path: /usr/lib/cni/calico
+  register: calico_plugin
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+- name: Verify loopback plugin presence on node (fallback)
+  ansible.builtin.stat:
+    path: /usr/lib/cni/loopback
+  register: loopback_plugin
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+- name: Fail early if CNI plugins not present
+  ansible.builtin.fail:
+    msg: "CNI plugins missing on {{ inventory_hostname }}: no /usr/lib/cni/calico or /usr/lib/cni/loopback found. Run node-cni to install them."
+  when: "inventory_hostname in groups['k8s_nodes'] and not (calico_plugin.stat.exists or loopback_plugin.stat.exists)"
+  become: true
+
+- name: Deploy Calico manifest using kubectl on master
+  ansible.builtin.shell: |
+    kubectl apply -f https://docs.projectcalico.org/manifests/calico.yaml --kubeconfig=/etc/kubernetes/admin.conf
+  register: calico_apply
+  changed_when: "'created' in calico_apply.stdout or 'configured' in calico_apply.stdout"
+  when: "inventory_hostname == 'k8s-master'"
+  become: true
+
+- name: Wait for Calico pods to be Ready
+  ansible.builtin.shell: |
+    # Print Calico-related pods for debugging; do not fail the playbook if not ready yet.
+    kubectl -n kube-system get pods --kubeconfig=/etc/kubernetes/admin.conf || true
+    kubectl -n calico-system get pods --kubeconfig=/etc/kubernetes/admin.conf || true
+  register: calico_wait
+  failed_when: false
+  changed_when: false
+  when: "inventory_hostname == 'k8s-master'"
+  become: true
+
+- name: Ensure CNI directories exist on all nodes
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  loop:
+    - /usr/lib/cni
+    - /opt/cni/bin
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+- name: Download containernetworking plugins tarball
+  get_url:
+    url: https://github.com/containernetworking/plugins/releases/download/v1.1.1/cni-plugins-linux-amd64-v1.1.1.tgz
+    dest: /tmp/cni-plugins.tgz
+    mode: '0644'
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+- name: Extract CNI plugins to /usr/lib/cni
+  unarchive:
+    src: /tmp/cni-plugins.tgz
+    dest: /usr/lib/cni
+    remote_src: yes
+    extra_opts: [--strip-components=0]
+  args:
+    creates: /usr/lib/cni/loopback
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+- name: Ensure CNI plugins are executable
+  file:
+    path: /usr/lib/cni
+    recurse: yes
+    mode: '0755'
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+- name: If calico wrote to /opt/cni/bin, copy those binaries into /usr/lib/cni
+  ansible.builtin.shell: |
+    mkdir -p /usr/lib/cni
+    cp -au /opt/cni/bin/* /usr/lib/cni/ || true
+  when: "inventory_hostname in groups['k8s_nodes']"
+  become: true
+
+# Copy Calico-specific CNI binaries from the calico/cni image into the host's /usr/lib/cni
+# We run a short pod on each node (scheduled via spec.nodeName) which mounts the host
+# /usr/lib/cni and copies the files from the image's /opt/cni/bin into that host path.
+# This avoids depending on docker/ctr tooling on the control host.
+- name: Copy calico CNI binaries to hosts via transient pod (run per node)
+  when: "inventory_hostname == 'k8s-master'"
+  vars:
+    calico_cni_image: docker.io/calico/cni:v3.25.0
+  include_tasks: copy-calico-cni-per-node.yml
+  loop: "{{ groups['k8s_nodes'] }}"
+  loop_control:
+    loop_var: item
+

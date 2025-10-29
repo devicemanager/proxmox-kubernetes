@@ -1,0 +1,8 @@
+---
+# handlers for node.containerd
+- name: Restart containerd
+  become: true
+  systemd:
+    name: containerd
+    state: restarted
+    daemon_reload: yes

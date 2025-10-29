@@ -11,13 +11,14 @@ provider "proxmox" {
   endpoint = "https://192.168.20.40:8006/"
   insecure = true
   api_token = var.proxmox_api_token
-  username = var.proxmox_user
+#  username = var.proxmox_user
 
   ssh {
     agent    = true
     username = "root"
   }
 }
+
 
 
 
@@ -72,7 +73,7 @@ resource "proxmox_virtual_environment_vm" "k8s-master" {
 
     dns {
       domain    = "device manager.org"
-      server    = var.vm_network.gateway
+      servers   = [var.vm_network.gateway]
     }
   }
 }
@@ -122,7 +123,7 @@ resource "proxmox_virtual_environment_vm" "k8s-worker" {
 
     dns {
       domain    = "device manager.org"
-      server    = var.vm_network.gateway
+      servers   = [var.vm_network.gateway]
     }
   }
 

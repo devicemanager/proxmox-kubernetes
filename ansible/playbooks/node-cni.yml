@@ -1,0 +1,6 @@
+---
+- name: Apply CNI (Calico)
+  hosts: k8s-master
+  become: true
+  roles:
+    - role: node.cni

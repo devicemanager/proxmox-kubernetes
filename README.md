@@ -1,3 +1,106 @@
+
+# Proxmox Kubernetes Cluster Automation
+
+This repository automates the deployment of a Kubernetes cluster on Proxmox using **Terraform** and **Ansible**. All node setup and cluster configuration is now handled by idempotent Ansible roles and playbooks. Shell scripts for node setup have been removed.
+
+## Directory Structure
+
+```
+proxmox-kubernetes/
+├── ansible/
+│   ├── inventory/hosts.ini
+│   ├── playbooks/
+│   │   ├── node-kubernetes.yml
+│   │   ├── node-cni.yml
+│   │   ├── join-workers.yml
+│   └── roles/
+│       ├── node.locales/
+│       ├── node.containerd/
+│       ├── node.kubernetes/
+│       └── node.cni/
+├── scripts/
+│   ├── create-template.sh
+│   ├── setup-api-token.sh
+│   ├── manage-lxc-template.sh
+│   ├── manage-vm-template.sh
+│   ├── ... (template/infra management scripts)
+├── terraform/
+│   ├── main.tf
+│   ├── variables.tf
+│   ├── terraform.tfvars
+│   ├── cloud-init-master.yaml
+│   ├── cloud-init-worker.yaml
+│   └── ...
+├── README.md
+├── troubleshooting.md
+└── docs/
+   └── ...
+```
+
+
+## Quick Start
+
+1. **Prepare Proxmox Template**
+   - Run `scripts/create-template.sh` to create a Debian 13 template with cloud-init and SSH access.
+
+2. **Configure API Token**
+   - Run `scripts/setup-api-token.sh` to create a Terraform API token for Proxmox.
+
+3. **Edit Terraform Variables**
+   - Copy `terraform/terraform.tfvars.example` to `terraform/terraform.tfvars` and edit with your SSH key and API token.
+
+4. **Deploy Infrastructure**
+   - Run `scripts/deploy.sh` to deploy master and worker VMs using Terraform.
+
+5. **Configure Kubernetes Nodes with Ansible**
+   - Update the Ansible inventory (`ansible/inventory/hosts.ini`) with the IPs of your master and worker nodes.
+   - Run the Ansible playbooks to configure all nodes:
+     ```bash
+     cd ansible/playbooks
+     ansible-playbook -i ../inventory/hosts.ini node-kubernetes.yml
+     ansible-playbook -i ../inventory/hosts.ini node-cni.yml
+     ```
+   - This will set up locales, container runtime, Kubernetes packages, and CNI (Calico) on all nodes.
+
+6. **Join Worker Nodes**
+   - Run the join-workers playbook to automatically join worker nodes to the cluster:
+     ```bash
+     ansible-playbook -i ../inventory/hosts.ini join-workers.yml
+     ```
+
+7. **Verify Cluster**
+   - Use kubectl to verify all nodes and pods are Ready:
+     ```bash
+     kubectl --kubeconfig=ansible/playbooks/ansible_fetched/admin.conf get nodes -o wide
+     kubectl --kubeconfig=ansible/playbooks/ansible_fetched/admin.conf get pods -A -o wide
+     ```
+
+**Note:** The POD network CIDR is set to `192.168.0.0/16` in both the Ansible roles and the Kubernetes/Calico configuration. Ensure your playbooks and manifests use this value for correct pod networking.
+
+
+## Ansible Roles & Playbooks
+
+- `ansible/roles/node.locales`: Locale configuration
+- `ansible/roles/node.containerd`: Container runtime setup
+- `ansible/roles/node.kubernetes`: Kubernetes installation and init
+- `ansible/roles/node.cni`: CNI (Calico) installation and verification
+- `ansible/playbooks/node-kubernetes.yml`: Node setup
+- `ansible/playbooks/node-cni.yml`: CNI setup
+- `ansible/playbooks/join-workers.yml`: Worker join automation
+
+
+## Template & VM Management
+
+Scripts for managing Proxmox templates and VMs (creation, conversion, password updates) are still available in `scripts/`. These are for template/infra management only and are not part of the node setup workflow.
+
+
+## Troubleshooting
+
+- If nodes or pods are not Ready, check the Ansible playbook output for errors.
+- Ensure the POD network CIDR is set to `192.168.0.0/16` everywhere (Kubernetes, Calico, Ansible roles).
+- For CNI issues, verify that Calico pods are running and CNI plugin binaries are present on all nodes.
+- For VM/template issues, use the scripts in `scripts/` to inspect, modify, or recover templates and VMs.
+- See `troubleshooting.md` and `docs/` for more details and recovery steps.
 # Proxmox Kubernetes Cluster Setup
 
 This repository contains scripts and configuration files for setting up a Kubernetes cluster on Proxmox VE using Terraform.

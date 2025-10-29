@@ -1,0 +1,61 @@
+---
+- name: Build pod manifest for node {{ item }}
+  copy:
+    dest: "/tmp/copy-calico-cni-{{ item }}.yaml"
+    content: |
+      apiVersion: v1
+      kind: Pod
+      metadata:
+        name: copy-calico-cni-{{ item }}
+        namespace: kube-system
+      spec:
+        nodeName: {{ item }}
+        restartPolicy: Never
+        tolerations:
+        - operator: "Exists"
+        containers:
+        - name: copy
+          image: {{ calico_cni_image }}
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              set -eux
+              mkdir -p /host_usr_lib_cni
+              # copy all cni plugins from image into host /usr/lib/cni
+              cp -a /opt/cni/bin/* /host_usr_lib_cni/ || true
+              # leave pod to exit
+          securityContext:
+            privileged: true
+          volumeMounts:
+          - name: host-cni
+            mountPath: /host_usr_lib_cni
+        volumes:
+        - name: host-cni
+          hostPath:
+            path: /usr/lib/cni
+            type: DirectoryOrCreate
+
+- name: Apply copy pod on master for node {{ item }}
+  ansible.builtin.shell: |
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf apply -f /tmp/copy-calico-cni-{{ item }}.yaml
+  register: apply_copy_pod
+  failed_when: apply_copy_pod.rc != 0 and 'already exists' not in (apply_copy_pod.stdout + apply_copy_pod.stderr)
+
+- name: Wait for copy pod to finish on node {{ item }}
+  ansible.builtin.shell: |
+    POD=copy-calico-cni-{{ item }}
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system wait --for=condition=Succeeded pod/$POD --timeout=120s || true
+  register: wait_copy
+  failed_when: false
+
+- name: Show pod logs for copy pod (debug)
+  ansible.builtin.shell: |
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system logs copy-calico-cni-{{ item }} || true
+  register: copy_logs
+  failed_when: false
+
+- name: Delete copy pod manifest and kubernetes pod for node {{ item }}
+  ansible.builtin.shell: |
+    kubectl --kubeconfig=/etc/kubernetes/admin.conf -n kube-system delete pod copy-calico-cni-{{ item }} --ignore-not-found
+    rm -f /tmp/copy-calico-cni-{{ item }}.yaml
+  failed_when: false

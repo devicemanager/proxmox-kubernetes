@@ -1,0 +1,92 @@
+
+# Install and configure Kubernetes packages
+- name: Install required system packages
+  apt:
+    name:
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - gpg
+    state: present
+    update_cache: yes
+
+- name: Download Kubernetes signing key
+  get_url:
+    url: https://pkgs.k8s.io/core:/stable:/v1.28/deb/Release.key
+    dest: /tmp/kubernetes-apt-keyring.gpg
+    mode: '0644'
+
+- name: Convert signing key to keyring
+  command: gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg /tmp/kubernetes-apt-keyring.gpg
+  args:
+    creates: /etc/apt/keyrings/kubernetes-apt-keyring.gpg
+
+- name: Add Kubernetes apt repository
+  apt_repository:
+    repo: 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.28/deb/ /'
+    state: present
+    filename: 'kubernetes'
+
+- name: Install Kubernetes packages
+  apt:
+    name:
+      - kubelet
+      - kubeadm
+      - kubectl
+    state: present
+    update_cache: yes
+
+- name: Hold Kubernetes packages
+  ansible.builtin.command:
+    cmd: "apt-mark hold kubelet kubeadm kubectl"
+  changed_when: true
+  register: hold_result
+  ignore_errors: false
+  become: true
+
+- name: Disable swap
+  command: swapoff -a
+  when: ansible_swaptotal_mb > 0
+
+- name: Remove swap from /etc/fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '^.*\sswap\s.*$'
+    state: absent
+
+# Initialize control plane on master (idempotent)
+- name: Initialize Kubernetes control plane (kubeadm init)
+  command: kubeadm init --pod-network-cidr=192.168.0.0/16
+  args:
+    creates: /etc/kubernetes/admin.conf
+  when: "inventory_hostname == 'k8s-master'"
+  register: kubeadm_init
+  become: true
+
+- name: Create kube config directory for debian user on master
+  file:
+    path: /home/debian/.kube
+    state: directory
+    owner: debian
+    group: debian
+    mode: '0700'
+  when: "inventory_hostname == 'k8s-master'"
+
+- name: Copy admin.conf to debian user's kubeconfig on master
+  ansible.builtin.shell: |
+    set -e
+    if [ -f /etc/kubernetes/admin.conf ] && [ ! -f /home/debian/.kube/config ]; then
+      cp -i /etc/kubernetes/admin.conf /home/debian/.kube/config
+      chown debian:debian /home/debian/.kube/config
+      chmod 0600 /home/debian/.kube/config
+    fi
+  args:
+    creates: /home/debian/.kube/config
+  when: "inventory_hostname == 'k8s-master'"
+
+- name: Fetch admin.conf to control host
+  fetch:
+    src: /etc/kubernetes/admin.conf
+    dest: ansible_fetched/admin.conf
+    flat: yes
+  when: "inventory_hostname == 'k8s-master'"

@@ -1,0 +1,7 @@
+---
+galaxy_info:
+  author: devicemanager
+  description: Calico CNI deployment for the cluster (applies on master)
+  license: MIT
+  min_ansible_version: '2.9'
+dependencies: []

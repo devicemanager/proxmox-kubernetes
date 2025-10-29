@@ -1,0 +1,43 @@
+---
+# Ensure locales are installed and configured
+- name: Install locales package
+  apt:
+    name: locales
+    state: present
+    update_cache: yes
+
+- name: Ensure en_US.UTF-8 is uncommented in /etc/locale.gen
+  lineinfile:
+    path: /etc/locale.gen
+    regexp: '^#?\s*en_US.UTF-8 UTF-8'
+    line: 'en_US.UTF-8 UTF-8'
+    state: present
+    backrefs: yes
+
+- name: Generate locales
+  command: locale-gen
+  args:
+    creates: /usr/lib/locale/en_US.utf8
+
+- name: Set locale environment variables
+  copy:
+    dest: /etc/profile.d/locale.sh
+    content: |
+      export LC_ALL=en_US.UTF-8
+      export LANG=en_US.UTF-8
+      export LANGUAGE=en_US.UTF-8
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Ensure SSH server accepts locale settings
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    line: 'AcceptEnv LANG LC_*'
+    state: present
+
+- name: Restart SSHD to apply locale changes
+  service:
+    name: sshd
+    state: restarted
+    enabled: yes

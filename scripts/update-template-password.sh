@@ -2,7 +2,19 @@
 # Update existing template with root password
 
 TEMPLATE_ID="9000"
-ROOT_PASSWORD='$y$j9T$eHbdTPK0hVFCjdHhTew7S.$nf/NOyA8YPNXsMFWbJEyfLOyHlqqhjjPkrCYW7qGZJ4'
+
+# Source secrets from .env (required). .env should not be committed.
+if [ -f .env ]; then
+    set -a
+    # shellcheck disable=SC1091
+    source .env
+    set +a
+fi
+
+if [ -z "${ROOT_PASSWORD:-}" ]; then
+    echo "Error: ROOT_PASSWORD not set. Add ROOT_PASSWORD to .env or export it in the environment."
+    exit 1
+fi
 
 echo "Updating template ${TEMPLATE_ID} with root password..."
 
